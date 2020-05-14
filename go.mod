@@ -1,10 +1,11 @@
 module github.com/hashicorp/terraform
 
+replace github.com/hashicorp/go-plugin v1.2.2 => ../go-plugin
+
 require (
 	cloud.google.com/go v0.45.1
 	github.com/Azure/azure-sdk-for-go v40.3.0+incompatible
 	github.com/Azure/go-autorest/autorest v0.10.0
-	github.com/Unknwon/com v0.0.0-20151008135407-28b053d5a292 // indirect
 	github.com/abdullin/seq v0.0.0-20160510034733-d5467c17e7af // indirect
 	github.com/agext/levenshtein v1.2.2
 	github.com/agl/ed25519 v0.0.0-20150830182803-278e1ec8e8a6 // indirect
@@ -32,7 +33,6 @@ require (
 	github.com/coreos/go-systemd v0.0.0-20181012123002-c6f51f82210d // indirect
 	github.com/coreos/pkg v0.0.0-20180928190104-399ea9e2e55f // indirect
 	github.com/davecgh/go-spew v1.1.1
-	github.com/dnaeon/go-vcr v0.0.0-20180920040454-5637cf3d8a31 // indirect
 	github.com/dylanmei/iso8601 v0.1.0 // indirect
 	github.com/dylanmei/winrmtest v0.0.0-20190225150635-99b7fe2fddf1
 	github.com/go-test/deep v1.0.3
