@@ -439,19 +439,10 @@ func (c *InitCommand) getProviders(earlyConfig *earlyconfig.Config, state *state
 	}
 
 	var inst *providercache.Installer
-	var err error
 	if len(pluginDirs) == 0 {
 		// By default we use a source that looks for providers in all of the
 		// standard locations, possibly customized by the user in CLI config.
-		inst, err = c.providerInstaller()
-		if err != nil {
-			diags = diags.Append(tfdiags.Sourceless(
-				tfdiags.Error,
-				"Error installing providers",
-				err.Error(),
-			))
-			return false, diags
-		}
+		inst = c.providerInstaller()
 	} else {
 		// If the user passes at least one -plugin-dir then that circumvents
 		// the usual sources and forces Terraform to consult only the given

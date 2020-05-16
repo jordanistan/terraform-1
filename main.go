@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/terraform-svchost/disco"
+	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/command/cliconfig"
 	"github.com/hashicorp/terraform/command/format"
 	"github.com/hashicorp/terraform/helper/logging"
@@ -182,12 +184,22 @@ func wrappedMain() int {
 		}
 	}
 
+	unmanagedProvidersStr := os.Getenv("TF_REATTACH_PROVIDERS")
+	unmanagedProviders := map[addrs.Provider]*plugin.ReattachConfig{}
+	if unmanagedProvidersStr != "" {
+		err := json.Unmarshal([]byte(unmanagedProvidersStr), &unmanagedProviders)
+		if err != nil {
+			Ui.Error("Invalid format for TF_REATTACH_PROVIDERS")
+			return 1
+		}
+	}
+
 	// Initialize the backends.
 	backendInit.Init(services)
 
 	// In tests, Commands may already be set to provide mock commands
 	if Commands == nil {
-		initCommands(config, services, providerSrc)
+		initCommands(config, services, providerSrc, unmanagedProviders)
 	}
 
 	// Run checkpoint

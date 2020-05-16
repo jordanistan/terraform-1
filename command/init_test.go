@@ -916,10 +916,7 @@ func TestInit_providerSource(t *testing.T) {
 		t.Errorf("wrong cache directory contents after upgrade\n%s", diff)
 	}
 
-	inst, err := m.providerInstaller()
-	if err != nil {
-		t.Fatalf("failed to instantiate provider installer: %s", err)
-	}
+	inst := m.providerInstaller()
 	gotSelected, err := inst.SelectedPackages()
 	if err != nil {
 		t.Fatalf("failed to get selected packages from installer: %s", err)
@@ -1047,10 +1044,7 @@ func TestInit_getUpgradePlugins(t *testing.T) {
 		t.Errorf("wrong cache directory contents after upgrade\n%s", diff)
 	}
 
-	inst, err := m.providerInstaller()
-	if err != nil {
-		t.Fatalf("failed to instantiate provider installer: %s", err)
-	}
+	inst := m.providerInstaller()
 	gotSelected, err := inst.SelectedPackages()
 	if err != nil {
 		t.Fatalf("failed to get selected packages from installer: %s", err)
@@ -1308,10 +1302,7 @@ func TestInit_pluginDirProviders(t *testing.T) {
 		t.Fatalf("bad: \n%s", ui.ErrorWriter)
 	}
 
-	inst, err := m.providerInstaller()
-	if err != nil {
-		t.Fatalf("failed to instantiate provider installer: %s", err)
-	}
+	inst := m.providerInstaller()
 	gotSelected, err := inst.SelectedPackages()
 	if err != nil {
 		t.Fatalf("failed to get selected packages from installer: %s", err)
