@@ -187,10 +187,19 @@ func wrappedMain() int {
 	unmanagedProvidersStr := os.Getenv("TF_REATTACH_PROVIDERS")
 	unmanagedProviders := map[addrs.Provider]*plugin.ReattachConfig{}
 	if unmanagedProvidersStr != "" {
+		var m map[string]*plugin.ReattachConfig
 		err := json.Unmarshal([]byte(unmanagedProvidersStr), &unmanagedProviders)
 		if err != nil {
 			Ui.Error("Invalid format for TF_REATTACH_PROVIDERS")
 			return 1
+		}
+		for p, c := range m {
+			a, diags := addrs.ParseProviderSourceString(p)
+			if diags.HasErrors() {
+				Ui.Error(fmt.Sprintf("Error parsing %q as a provider address: %s", a, diags.Err()))
+				return 1
+			}
+			unmanagedProviders[a] = c
 		}
 	}
 
