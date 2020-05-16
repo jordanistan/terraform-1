@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -187,10 +188,20 @@ func wrappedMain() int {
 	unmanagedProvidersStr := os.Getenv("TF_REATTACH_PROVIDERS")
 	unmanagedProviders := map[addrs.Provider]*plugin.ReattachConfig{}
 	if unmanagedProvidersStr != "" {
-		var m map[string]*plugin.ReattachConfig
-		err := json.Unmarshal([]byte(unmanagedProvidersStr), &unmanagedProviders)
+		// {"hashicorp/random":{"Protocol":"grpc","Addr":{"Name":"/tmp/plugin553215095","Net":"unix"},"Pid":19594,"Test":true}}
+		type reattachConfig struct {
+			Protocol string
+			Addr     struct {
+				Network string
+				String  string
+			}
+			Pid  int
+			Test bool
+		}
+		var m map[string]reattachConfig
+		err := json.Unmarshal([]byte(unmanagedProvidersStr), &m)
 		if err != nil {
-			Ui.Error("Invalid format for TF_REATTACH_PROVIDERS")
+			Ui.Error("Invalid format for TF_REATTACH_PROVIDERS:" + err.Error())
 			return 1
 		}
 		for p, c := range m {
@@ -199,7 +210,30 @@ func wrappedMain() int {
 				Ui.Error(fmt.Sprintf("Error parsing %q as a provider address: %s", a, diags.Err()))
 				return 1
 			}
-			unmanagedProviders[a] = c
+			var addr net.Addr
+			switch c.Addr.Network {
+			case "unix":
+				addr, err = net.ResolveUnixAddr("unix", c.Addr.String)
+				if err != nil {
+					Ui.Error(fmt.Sprintf("Invalid unix socket path for %q: %s", p, c.Addr.String))
+					return 1
+				}
+			case "tcp":
+				addr, err = net.ResolveTCPAddr("tcp", c.Addr.String)
+				if err != nil {
+					Ui.Error(fmt.Sprintf("Invalid TCP address for %q: %s", p, c.Addr.String))
+					return 1
+				}
+			default:
+				Ui.Error(fmt.Sprintf("Unknown address type %q for %q", c.Addr.Network, p))
+				return 1
+			}
+			unmanagedProviders[a] = &plugin.ReattachConfig{
+				Protocol: plugin.Protocol(c.Protocol),
+				Pid:      c.Pid,
+				Test:     c.Test,
+				Addr:     addr,
+			}
 		}
 	}
 
