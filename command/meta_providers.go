@@ -209,8 +209,6 @@ func providerFactory(meta *providercache.CachedProvider) providers.Factory {
 			Output: os.Stderr,
 		})
 
-		logger.Trace("starting plugin", "provider", meta.Provider.ForDisplay())
-
 		config := &plugin.ClientConfig{
 			HandshakeConfig:  tfplugin.Handshake,
 			Logger:           logger,
@@ -246,12 +244,10 @@ func providerFactory(meta *providercache.CachedProvider) providers.Factory {
 func unmanagedProviderFactory(provider addrs.Provider, reattach *plugin.ReattachConfig) providers.Factory {
 	return func() (providers.Interface, error) {
 		logger := hclog.New(&hclog.LoggerOptions{
-			Name:   "plugin",
+			Name:   "unmanaged-plugin",
 			Level:  hclog.Trace,
 			Output: os.Stderr,
 		})
-
-		logger.Trace("attaching plugin", "provider", provider.ForDisplay())
 
 		config := &plugin.ClientConfig{
 			HandshakeConfig:  tfplugin.Handshake,
