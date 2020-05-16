@@ -47,10 +47,6 @@ type GRPCProvider struct {
 	// used in an end to end test of a provider.
 	TestServer *grpc.Server
 
-	// Unmanaged marks this provider as unmanaged, meaning its process
-	// lifecycle should not be controlled by Terraform.
-	Unmanaged bool
-
 	// Proto client use to make the grpc service calls.
 	client proto.ProviderClient
 
@@ -613,13 +609,6 @@ func (p *GRPCProvider) Close() error {
 		log.Println("[DEBUG] provider has no plugin.Client")
 		return nil
 	}
-
-	/*
-		if p.Unmanaged {
-			log.Println("[DEBUG] unmanaged provider, not killing")
-			return nil
-		}
-	*/
 
 	p.PluginClient.Kill()
 	return nil
