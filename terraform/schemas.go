@@ -3,7 +3,6 @@ package terraform
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/hashicorp/terraform/addrs"
 	"github.com/hashicorp/terraform/configs"
@@ -112,11 +111,7 @@ func loadProviderSchemas(schemas map[addrs.Provider]*ProviderSchema, config *con
 			return
 		}
 		defer func() {
-			if os.Getenv("TF_PROVIDER_SOFT_STOP") == "" {
-				provider.Close()
-			} else {
-				log.Printf("[TRACE] not closing provider, we're in soft-stop mode.")
-			}
+			provider.Close()
 		}()
 
 		resp := provider.GetSchema()

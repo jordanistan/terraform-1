@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/davecgh/go-spew/spew"
 	hclog "github.com/hashicorp/go-hclog"
 	plugin "github.com/hashicorp/go-plugin"
 
@@ -193,9 +192,21 @@ func (m *Meta) providerFactories() (map[addrs.Provider]providers.Factory, error)
 	// and they'll just be ignored if not used.
 	internalFactories := m.internalProviders()
 
-	factories := make(map[addrs.Provider]providers.Factory, len(selected)+len(internalFactories))
+	unmanagedFactories, err := m.unmanagedProviderConfigs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse unmanaged provider configs: %s", err)
+	}
+
+	factories := make(map[addrs.Provider]providers.Factory, len(selected)+len(internalFactories)+len(unmanagedFactories))
 	for name, factory := range internalFactories {
 		factories[addrs.NewBuiltInProvider(name)] = factory
+	}
+	for name, reattach := range unmanagedFactories {
+		provider, diags := addrs.ParseProviderSourceString(name)
+		if diags.HasErrors() {
+			return nil, fmt.Errorf("failed to parse provider %s: %s", name, diags.Err())
+		}
+		factories[provider] = unmanagedProviderFactory(provider, reattach)
 	}
 	for provider, cached := range selected {
 		factories[provider] = providerFactory(cached)
@@ -319,53 +330,14 @@ func providerFactory(meta *providercache.CachedProvider) providers.Factory {
 
 		logger.Trace("starting plugin", "provider", meta.Provider.ForDisplay())
 
-		reattachConfigs, err := parseReattachFromEnv(os.Getenv("TF_PROVIDER_REATTACH"))
-		if err != nil {
-			return nil, err
-		}
-
-		logger.Trace("got reattach config", "config", spew.Sdump(reattachConfigs))
-
 		config := &plugin.ClientConfig{
 			HandshakeConfig:  tfplugin.Handshake,
 			Logger:           logger,
 			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			Managed:          true,
-		}
-
-		// if we have reattach information for this provider, we want
-		// to connect to an already running process, instead of
-		// starting a new one.
-		if reattach, ok := reattachConfigs[meta.Provider.ForDisplay()]; ok && reattach.Set() {
-			config.Reattach = &plugin.ReattachConfig{
-				Protocol: reattach.protocol,
-				Addr:     reattach.addr,
-				Pid:      reattach.pid,
-				Test:     reattach.test,
-			}
-			if plugins, ok := tfplugin.VersionedPlugins[reattach.protoVersion]; !ok {
-				return nil, fmt.Errorf("unknown protocol version %d in reattach config for %q", reattach.protoVersion, meta.Provider.ForDisplay())
-			} else {
-				config.Plugins = plugins
-			}
-
-			// when shutting down providers by stopping the server,
-			// we shouldn't consider the client "managed", as
-			// go-plugin will then try to kill the process at the
-			// end of Terraform's run.  So we only set
-			// config.Managed to true if someone else isn't
-			// managing the process.
-			config.Managed = false
-		} else {
-			config.Cmd = exec.Command(meta.ExecutableFile)
-			// we can only use AutoMTLS if we're not using reattach
-			config.AutoMTLS = enableProviderAutoMTLS
-			// VersionedPlugins only work when the go-plugin
-			// handshake is initiated by terraform; if we start a
-			// process outside of terraform, we need it to not be
-			// set and to use the plugins for the protocol version
-			// passed in.
-			config.VersionedPlugins = tfplugin.VersionedPlugins
+			Cmd:              exec.Command(meta.ExecutableFile),
+			AutoMTLS:         enableProviderAutoMTLS,
+			VersionedPlugins: tfplugin.VersionedPlugins,
 		}
 
 		client := plugin.NewClient(config)
@@ -383,12 +355,53 @@ func providerFactory(meta *providercache.CachedProvider) providers.Factory {
 		p := raw.(*tfplugin.GRPCProvider)
 		p.PluginClient = client
 
-		if reattach, ok := reattachConfigs[meta.Provider.ForDisplay()]; ok && reattach.Set() {
-			// by setting the GRPCProvider's Unmanaged property, we
-			// tell Terraform to not try to control the process
-			// lifecycle, as it's not Terraform's job anymore.
-			p.Unmanaged = true
+		return p, nil
+	}
+}
+
+// unmanagedProviderFactory produces a provider factory that uses the passed
+// reattach information to connect to go-plugin processes that are already
+// running, and implements providers.Interface against it.
+func unmanagedProviderFactory(provider addrs.Provider, reattach reattachConfig) providers.Factory {
+	return func() (providers.Interface, error) {
+		logger := hclog.New(&hclog.LoggerOptions{
+			Name:   "plugin",
+			Level:  hclog.Trace,
+			Output: os.Stderr,
+		})
+
+		logger.Trace("attaching plugin", "provider", provider.ForDisplay())
+
+		config := &plugin.ClientConfig{
+			HandshakeConfig:  tfplugin.Handshake,
+			Logger:           logger,
+			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+			Managed:          false,
+			Reattach: &plugin.ReattachConfig{
+				Protocol: reattach.protocol,
+				Addr:     reattach.addr,
+				Pid:      reattach.pid,
+				Test:     reattach.test,
+			},
 		}
+		if plugins, ok := tfplugin.VersionedPlugins[reattach.protoVersion]; !ok {
+			return nil, fmt.Errorf("unknown protocol version %d in reattach config for %q", reattach.protoVersion, provider.ForDisplay())
+		} else {
+			config.Plugins = plugins
+		}
+
+		client := plugin.NewClient(config)
+		rpcClient, err := client.Client()
+		if err != nil {
+			return nil, err
+		}
+
+		raw, err := rpcClient.Dispense(tfplugin.ProviderPluginName)
+		if err != nil {
+			return nil, err
+		}
+
+		p := raw.(*tfplugin.GRPCProvider)
 		return p, nil
 	}
 }
