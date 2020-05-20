@@ -35,8 +35,8 @@ func (t *RemovedModuleTransformer) Transform(g *Graph) error {
 	// add closers to collect any module instances we're removing
 	for _, modAddr := range removed {
 		closer := &nodeCloseModule{
-			Addr:     modAddr,
-			orphaned: true,
+			Addr:    modAddr,
+			destroy: true,
 		}
 		g.Add(closer)
 	}
