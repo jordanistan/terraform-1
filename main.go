@@ -188,7 +188,6 @@ func wrappedMain() int {
 	unmanagedProvidersStr := os.Getenv("TF_REATTACH_PROVIDERS")
 	unmanagedProviders := map[addrs.Provider]*plugin.ReattachConfig{}
 	if unmanagedProvidersStr != "" {
-		// {"hashicorp/random":{"Protocol":"grpc","Addr":{"Name":"/tmp/plugin553215095","Net":"unix"},"Pid":19594,"Test":true}}
 		type reattachConfig struct {
 			Protocol string
 			Addr     struct {
