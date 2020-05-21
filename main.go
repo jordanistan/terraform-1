@@ -185,55 +185,13 @@ func wrappedMain() int {
 		}
 	}
 
-	unmanagedProvidersStr := os.Getenv("TF_REATTACH_PROVIDERS")
-	unmanagedProviders := map[addrs.Provider]*plugin.ReattachConfig{}
-	if unmanagedProvidersStr != "" {
-		type reattachConfig struct {
-			Protocol string
-			Addr     struct {
-				Network string
-				String  string
-			}
-			Pid  int
-			Test bool
-		}
-		var m map[string]reattachConfig
-		err := json.Unmarshal([]byte(unmanagedProvidersStr), &m)
-		if err != nil {
-			Ui.Error("Invalid format for TF_REATTACH_PROVIDERS:" + err.Error())
-			return 1
-		}
-		for p, c := range m {
-			a, diags := addrs.ParseProviderSourceString(p)
-			if diags.HasErrors() {
-				Ui.Error(fmt.Sprintf("Error parsing %q as a provider address: %s", a, diags.Err()))
-				return 1
-			}
-			var addr net.Addr
-			switch c.Addr.Network {
-			case "unix":
-				addr, err = net.ResolveUnixAddr("unix", c.Addr.String)
-				if err != nil {
-					Ui.Error(fmt.Sprintf("Invalid unix socket path for %q: %s", p, c.Addr.String))
-					return 1
-				}
-			case "tcp":
-				addr, err = net.ResolveTCPAddr("tcp", c.Addr.String)
-				if err != nil {
-					Ui.Error(fmt.Sprintf("Invalid TCP address for %q: %s", p, c.Addr.String))
-					return 1
-				}
-			default:
-				Ui.Error(fmt.Sprintf("Unknown address type %q for %q", c.Addr.Network, p))
-				return 1
-			}
-			unmanagedProviders[a] = &plugin.ReattachConfig{
-				Protocol: plugin.Protocol(c.Protocol),
-				Pid:      c.Pid,
-				Test:     c.Test,
-				Addr:     addr,
-			}
-		}
+	// The user can declare that certain providers are being managed on
+	// Terraform's behalf using this environment variable. Thsi is used
+	// primarily by the SDK's acceptance testing framework.
+	unmanagedProviders, err := parseReattachProviders(os.Getenv("TF_REATTACH_PROVIDERS"))
+	if err != nil {
+		Ui.Error(err.Error())
+		return 1
 	}
 
 	// Initialize the backends.
@@ -418,4 +376,54 @@ func mergeEnvArgs(envName string, cmd string, args []string) ([]string, error) {
 	copy(newArgs[idx:], extra)
 	copy(newArgs[len(extra)+idx:], args[idx:])
 	return newArgs, nil
+}
+
+// parse information on reattaching to unmanaged providers out of a
+// JSON-encoded environment variable.
+func parseReattachProviders(in string) (map[addrs.Provider]*plugin.ReattachConfig, error) {
+	unmanagedProviders := map[addrs.Provider]*plugin.ReattachConfig{}
+	if in != "" {
+		type reattachConfig struct {
+			Protocol string
+			Addr     struct {
+				Network string
+				String  string
+			}
+			Pid  int
+			Test bool
+		}
+		var m map[string]reattachConfig
+		err := json.Unmarshal([]byte(in), &m)
+		if err != nil {
+			return unmanagedProviders, fmt.Errorf("Invalid format for TF_REATTACH_PROVIDERS: %w", err)
+		}
+		for p, c := range m {
+			a, diags := addrs.ParseProviderSourceString(p)
+			if diags.HasErrors() {
+				return unmanagedProviders, fmt.Errorf("Error parsing %q as a provider address: %w", a, diags.Err())
+			}
+			var addr net.Addr
+			switch c.Addr.Network {
+			case "unix":
+				addr, err = net.ResolveUnixAddr("unix", c.Addr.String)
+				if err != nil {
+					return unmanagedProviders, fmt.Errorf("Invalid unix socket path %q for %q: %w", c.Addr.String, p, err)
+				}
+			case "tcp":
+				addr, err = net.ResolveTCPAddr("tcp", c.Addr.String)
+				if err != nil {
+					return unmanagedProviders, fmt.Errorf("Invalid TCP address %q for %q: %w", c.Addr.String, p, err)
+				}
+			default:
+				return unmanagedProviders, fmt.Errorf("Unknown address type %q for %q", c.Addr.Network, p)
+			}
+			unmanagedProviders[a] = &plugin.ReattachConfig{
+				Protocol: plugin.Protocol(c.Protocol),
+				Pid:      c.Pid,
+				Test:     c.Test,
+				Addr:     addr,
+			}
+		}
+	}
+	return unmanagedProviders, nil
 }
